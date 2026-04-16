@@ -23,7 +23,7 @@
 #define DOT_R2 DOT_R * DOT_R
 #define DOT_M 50
 
-#define LGT_MAX_STEP 1000
+#define LGT_MAX_STEP 10000
 #define LGT_R DOT_R * 3
 
 struct Slider {
@@ -87,7 +87,7 @@ Dot dots[6] = {
 
 std::vector<int> pipes[2] = {
     {4,0,1,5},
-    {-4,0,2,1,-5}
+    {4,0,2,1,5}
 };
 
 float get_normal_sample(float mean = 0, float stddev = 1.0f) {
@@ -131,16 +131,20 @@ void drawLightning(Dot* dot1, Dot* dot2, float rate, float brat, float blen, flo
         Vector2Add(pos1, Vector2Scale(Vector2{get_normal_sample(), get_normal_sample()}, LGT_R * 0.5f));
     Vector2 cp1 = pos1;
     Vector2 cp2 = pos2;
-    if (dot0 || dot3) {
-        auto pos0 = dot0 ? dot0->pos : pos1;
-        auto pos3 = dot3 ? dot3->pos : pos2;
-        auto mid = Vector2Add(pos0, Vector2Scale(Vector2Subtract(pos2, pos0), 0.5f));
-        auto midir = Vector2Rotate(Vector2Normalize(Vector2Subtract(mid, pos1)), -PI * 0.5f);
-        cp1 = Vector2Add(pos1, Vector2Scale(midir, round * Vector2DotProduct(Vector2Subtract(pos2, pos1), midir)));
-        mid = Vector2Add(pos1, Vector2Scale(Vector2Subtract(pos3, pos1), 0.5f));
-        midir = Vector2Rotate(Vector2Normalize(Vector2Subtract(mid, pos2)), -PI * 0.5f);
-        cp2 = Vector2Add(pos2, Vector2Scale(midir, -round * Vector2DotProduct(Vector2Subtract(pos2, pos1), midir)));
+    auto pos0 = dot0 ? dot0->pos : pos1;
+    auto pos3 = dot3 ? dot3->pos : pos2;
+    if (dot0) {
+        auto cangle = (Vector2Angle(Vector2Subtract(pos0, pos1), Vector2Subtract(pos2, pos1)));
+        auto hangle = 0.5f * (PI - cangle);
+        auto dir = Vector2Rotate(Vector2Normalize(Vector2Subtract(pos2, pos1)), hangle);
+        cp1 = Vector2Add(pos1, Vector2Scale(dir, round * Vector2DotProduct(Vector2Subtract(pos2, pos1), dir)));
         //DrawCircleV(cp1, 2, RED);
+    }
+    if (dot3) {
+        auto cangle = (Vector2Angle(Vector2Subtract(pos3, pos2), Vector2Subtract(pos1, pos2)));
+        auto hangle = 0.5f * (PI - cangle);
+        auto dir = Vector2Rotate(Vector2Normalize(Vector2Subtract(pos1, pos2)), hangle);
+        cp2 = Vector2Add(pos2, Vector2Scale(dir, round * Vector2DotProduct(Vector2Subtract(pos1, pos2), dir)));
         //DrawCircleV(cp2, 2, GREEN);
     }
     float currate = rate;
@@ -158,7 +162,7 @@ void drawLightning(Dot* dot1, Dot* dot2, float rate, float brat, float blen, flo
             done = true;
         }
         float dist = Vector2Distance(pos1, newpos);
-        if (dot3) {
+        if (dot0 || dot3) {
             auto p11 = mapLineToBez(pos1, cp1, pos2, pos);
             auto p12 = mapLineToBez(pos1, cp2, pos2, pos);
             auto p21 = mapLineToBez(pos1, cp1, pos2, newpos);
@@ -213,7 +217,7 @@ void handleAndDrawDots() {
 
     for (int i = 0; i < 2; ++i) {
         for (int j = 0; j < pipes[i].size() - 1; ++j) {
-            Dot* prv = (j > 1) ? (&dots[pipes[i][j-1]]) : nullptr;
+            Dot* prv = (j >= 1) ? (&dots[pipes[i][j-1]]) : nullptr;
             Dot* cur = &dots[pipes[i][j]];
             Dot* nxt = &dots[pipes[i][j+1]];
             Dot* aft = (j < pipes[i].size() - 2) ? (&dots[pipes[i][j+2]]) : nullptr;
