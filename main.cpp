@@ -1,11 +1,6 @@
-#include <algorithm>
-#include <cmath>
 #include <string>
-#include <random>
-#include <deque>
 #include <vector>
-#include "raylib.h"
-#include "raymath.h"
+#include "lgt.h"
 
 #define WIN_SZ 800
 #define WIN_NOM "⚡⚡⚡"
@@ -23,12 +18,14 @@
 #define DOT_R2 DOT_R * DOT_R
 #define DOT_M 50
 
-#define LGT_MAX_STEP 10000
-#define LGT_R DOT_R * 3
-
 struct Slider {
     std::string nom;
     float min, val, max;
+};
+
+struct Dot {
+    Vector2 pos;
+    Color clr;
 };
 
 Slider sliders[5] = {
@@ -37,6 +34,20 @@ Slider sliders[5] = {
     {"blen", 0.1f, 0.5f, 0.9f},
     {"step", 1.0f, 10.0f, 100.0f},
     {"round", 0.0f, 0.5f, 1.0f},
+};
+
+Dot dots[6] = {
+    {{100, 100}, {0x50, 0, 0, 0xff}},
+    {{300, 100}, {0, 0x50, 0, 0xff}},
+    {{100, 300}, {0, 0, 0x50, 0xff}},
+    {{300, 300}, {0x50, 0x50, 0x50, 0xff}},
+    {{50, 50}, {0x50, 0x50, 0, 0xff}},
+    {{350, 350}, {0, 0x50, 0x50, 0xff}},
+};
+
+std::vector<int> pipes[2] = {
+    {4,0,1,5},
+    {4,0,2,1,5}
 };
 
 void handleAndDrawSliders(const Font& font) {
@@ -71,126 +82,6 @@ void handleAndDrawSliders(const Font& font) {
     }
 }
 
-struct Dot {
-    Vector2 pos;
-    Color clr;
-};
-
-Dot dots[6] = {
-    {{100, 100}, {0x50, 0, 0, 0xff}},
-    {{300, 100}, {0, 0x50, 0, 0xff}},
-    {{100, 300}, {0, 0, 0x50, 0xff}},
-    {{300, 300}, {0x50, 0x50, 0x50, 0xff}},
-    {{50, 50}, {0x50, 0x50, 0, 0xff}},
-    {{350, 350}, {0, 0x50, 0x50, 0xff}},
-};
-
-std::vector<int> pipes[2] = {
-    {4,0,1,5},
-    {4,0,2,1,5}
-};
-
-float get_normal_sample(float mean = 0, float stddev = 1.0f) {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    std::normal_distribution<float> dist(mean, stddev);
-    return dist(gen);
-}
-
-Vector2 mapLineToBez(Vector2 p1, Vector2 c2, Vector2 p3, Vector2 p) {
-    Vector2 line = Vector2Subtract(p3, p1);
-    float lineLen = Vector2Length(line);
-    if (lineLen <= 1e-6f) return p1;
-    Vector2 lineDir = Vector2Scale(line, 1.0f / lineLen);
-    float t = Vector2DotProduct(Vector2Subtract(p, p1), lineDir) / lineLen;
-    t = std::clamp(t, 0.0f, 1.0f);
-    Vector2 lineNormal(-lineDir.y, lineDir.x);
-    float d = Vector2DotProduct(Vector2Subtract(p, p1), lineNormal);
-    float u = 1.0f - t;
-    Vector2 bez =
-        Vector2Add(Vector2Add(
-            Vector2Scale(p1, u * u),
-            Vector2Scale(c2, 2.0f * u * t)),
-            Vector2Scale(p3, t * t)
-        );
-    Vector2 tan =
-        Vector2Add(
-            Vector2Scale(Vector2Subtract(c2, p1), 2.0f * u),
-            Vector2Scale(Vector2Subtract(p3, c2), 2.0f * t)
-        );
-    float tanLen = Vector2Length(tan);
-    if (tanLen <= 1e-6f) return bez;
-    Vector2 bezDir = Vector2Scale(tan, 1.0f / tanLen);
-    Vector2 bezNormal(-bezDir.y, bezDir.x);
-    return Vector2Add(bez, Vector2Scale(bezNormal, d));
-}
-
-void drawLightning(Dot* dot1, Dot* dot2, float rate, float brat, float blen, float step, float round, Dot* dot0 = nullptr, Dot* dot3 = nullptr) {
-    Vector2 pos1 = dot1->pos, pos = pos1;
-    Vector2 pos2 = dot2 ? dot2->pos : 
-        Vector2Add(pos1, Vector2Scale(Vector2{get_normal_sample(), get_normal_sample()}, LGT_R * 0.5f));
-    Vector2 cp1 = pos1;
-    Vector2 cp2 = pos2;
-    auto pos0 = dot0 ? dot0->pos : pos1;
-    auto pos3 = dot3 ? dot3->pos : pos2;
-    if (dot0) {
-        auto cangle = (Vector2Angle(Vector2Subtract(pos0, pos1), Vector2Subtract(pos2, pos1)));
-        auto hangle = 0.5f * (PI - cangle);
-        auto dir = Vector2Rotate(Vector2Normalize(Vector2Subtract(pos2, pos1)), hangle);
-        cp1 = Vector2Add(pos1, Vector2Scale(dir, round * Vector2DotProduct(Vector2Subtract(pos2, pos1), dir)));
-        //DrawCircleV(cp1, 2, RED);
-    }
-    if (dot3) {
-        auto cangle = (Vector2Angle(Vector2Subtract(pos3, pos2), Vector2Subtract(pos1, pos2)));
-        auto hangle = 0.5f * (PI - cangle);
-        auto dir = Vector2Rotate(Vector2Normalize(Vector2Subtract(pos1, pos2)), hangle);
-        cp2 = Vector2Add(pos2, Vector2Scale(dir, round * Vector2DotProduct(Vector2Subtract(pos1, pos2), dir)));
-        //DrawCircleV(cp2, 2, GREEN);
-    }
-    float currate = rate;
-    float initdist = Vector2Distance(pos1, pos2);
-    const float step2 = step * step;
-    bool done = false;
-    std::deque<Vector2> hist;
-    for (int i = 0; i < LGT_MAX_STEP; ++i) {
-        auto n = Vector2Normalize(Vector2Subtract(pos2, pos));
-        float dir = atan2(n.y, n.x);
-        float val = get_normal_sample(dir, 3.14159f * (1.0f - currate) + 1e-6);
-        auto newpos = Vector2Add(pos, Vector2Scale({cos(val), sin(val)}, step));
-        if (Vector2DistanceSqr(newpos, pos2) < step2) {
-            newpos = pos2;
-            done = true;
-        }
-        float dist = Vector2Distance(pos1, newpos);
-        if (dot0 || dot3) {
-            auto p11 = mapLineToBez(pos1, cp1, pos2, pos);
-            auto p12 = mapLineToBez(pos1, cp2, pos2, pos);
-            auto p21 = mapLineToBez(pos1, cp1, pos2, newpos);
-            auto p22 = mapLineToBez(pos1, cp2, pos2, newpos);
-            float dist0 = Vector2Distance(pos1, pos);
-            auto p1 = Vector2Lerp(p11, p12, dist0 / initdist);
-            auto p2 = Vector2Lerp(p21, p22, dist / initdist);
-            DrawLineV(p1, p2, SKYBLUE);
-        } else {
-            DrawLineV(pos, newpos, SKYBLUE);
-        }
-        if (done)
-            break;
-        hist.push_back(pos);
-        pos = newpos;
-        currate = rate + (1.0f - rate) * (1.0f - rate) * std::max(0.0f, std::min(dist / initdist, 1.0f));
-
-        if ((rand() % 1000) < brat * 1000) {
-            for (int i = 0; i < hist.size(); ++i) {
-                pos = hist.back();
-                hist.pop_back();
-                if ((rand() % 1000) < blen * 1000)
-                    break;
-            }
-        }
-    }
-}
-
 void handleAndDrawDots() {
     static Dot* selectedDot = nullptr;
     const auto mpos = GetMousePosition();
@@ -215,24 +106,32 @@ void handleAndDrawDots() {
     for (const auto& dot : dots)
         DrawCircleV(dot.pos, DOT_R, dot.clr);
 
+    LGTcfg cfg = {
+        10000,
+        16 * 3,
+        sliders[0].val,
+        sliders[1].val,
+        sliders[2].val,
+        sliders[3].val,
+        sliders[4].val
+    };
+
     for (int i = 0; i < 2; ++i) {
         for (int j = 0; j < pipes[i].size() - 1; ++j) {
-            Dot* prv = (j >= 1) ? (&dots[pipes[i][j-1]]) : nullptr;
-            Dot* cur = &dots[pipes[i][j]];
-            Dot* nxt = &dots[pipes[i][j+1]];
-            Dot* aft = (j < pipes[i].size() - 2) ? (&dots[pipes[i][j+2]]) : nullptr;
+            Vector2* prv = (j >= 1) ? (&dots[pipes[i][j-1]].pos) : nullptr;
+            Vector2* cur = &dots[pipes[i][j]].pos;
+            Vector2* nxt = &dots[pipes[i][j+1]].pos;
+            Vector2* aft = (j < pipes[i].size() - 2) ? (&dots[pipes[i][j+2]].pos) : nullptr;
             if (pipes[i][j] >= 0 && pipes[i][j+1] >= 0)
-                drawLightning(cur, nxt, sliders[0].val, sliders[1].val, sliders[2].val, sliders[3].val, sliders[4].val, prv, aft);
+                drawLightning(cur, nxt, prv, aft, &cfg);
         }
     }
-    //for (int i = 0; i < 3; ++i)
-    //    drawLightning(&dots[i], &dots[(i + 1) % 3], sliders[0].val, sliders[1].val, sliders[2].val, sliders[3].val, sliders[4].val,  &dots[(i + 2) % 3],  &dots[(i + 2) % 3]);
-    drawLightning(&dots[3], nullptr, sliders[0].val, sliders[1].val, sliders[2].val, sliders[3].val, sliders[4].val);
+    drawLightning(&dots[3].pos, nullptr, nullptr, nullptr, &cfg);
 }
 
 int main() {
     
-    //SetTraceLogLevel(LOG_ERROR);
+    SetTraceLogLevel(LOG_ERROR);
     InitWindow(WIN_SZ, WIN_SZ, WIN_NOM);
     SetTargetFPS(60);
 
