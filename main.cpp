@@ -113,7 +113,8 @@ void handleAndDrawDots() {
         sliders[1].val,
         sliders[2].val,
         sliders[3].val,
-        sliders[4].val
+        sliders[4].val,
+        SKYBLUE
     };
 
     for (int i = 0; i < 2; ++i) {

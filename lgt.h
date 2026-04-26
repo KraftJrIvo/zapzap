@@ -50,6 +50,7 @@ struct LGTcfg {
     const float blen  = 0.5;
     const float step  = 10.0f;
     const float round = 0.5f;
+    const Color color = SKYBLUE;
 };
 
 void drawLightning(Vector2* dot1, Vector2* dot2, Vector2* dot0 = nullptr, Vector2* dot3 = nullptr, LGTcfg* cfg_ = nullptr) {
@@ -99,9 +100,9 @@ void drawLightning(Vector2* dot1, Vector2* dot2, Vector2* dot0 = nullptr, Vector
             float dist0 = Vector2Distance(pos1, pos);
             auto p1 = Vector2Lerp(p11, p12, dist0 / initdist);
             auto p2 = Vector2Lerp(p21, p22, dist / initdist);
-            DrawLineV(p1, p2, SKYBLUE);
+            DrawLineV(p1, p2, cfg.color);
         } else {
-            DrawLineV(pos, newpos, SKYBLUE);
+            DrawLineV(pos, newpos, cfg.color);
         }
         if (done)
             break;
